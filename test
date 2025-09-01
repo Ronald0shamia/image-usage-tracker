@@ -1,0 +1,207 @@
+<?php
+/**
+ * Plugin Name: Image Usage Tracker
+ * Description: Zeigt an, in welchen Beiträgen oder Seiten ein Bild verwendet wird.
+ * Version: 1.0
+ * Author: Dein Name
+ */
+
+if (!defined('ABSPATH')) {
+    exit; // Direkter Zugriff verhindern
+}
+
+class ImageUsageTracker {
+
+    public function __construct() {
+        // Admin-Seite registrieren
+        add_action('admin_menu', [$this, 'register_admin_menu']);
+
+        // Button in Anhang-Details einfügen
+        add_filter('attachment_fields_to_edit', [$this, 'add_usage_button'], 10, 2);
+
+        // Logik zum Anzeigen der Bildverwendung
+        add_action('admin_init', [$this, 'show_image_usage']);
+    }
+
+    /**
+     * Admin-Menü registrieren
+     */
+    public function register_admin_menu() {
+        add_menu_page(
+            'Bild-Verwendung',
+            'Bild-Verwendung',
+            'manage_options',
+            'image-usage-tracker',
+            [$this, 'usage_page'],
+            'dashicons-format-image'
+        );
+
+        add_submenu_page(
+            'image-usage-tracker',
+            'Bilder-Übersicht',
+            'Bilder-Übersicht',
+            'manage_options',
+            'image-usage-tracker-overview',
+            [$this, 'overview_page']
+        );
+
+    }
+
+    /**
+     * Button "Verwendung anzeigen" in die Anhang-Details einfügen
+     */
+    public function add_usage_button($form_fields, $post) {
+        $url = menu_page_url('image-usage-tracker', false) . '&image_id=' . $post->ID;
+        
+        // Erster Button: Verwendung anzeigen
+        $form_fields['image_usage_tracker'] = [
+            'label' => __('Verwendung', 'image-usage-tracker'),
+            'input' => 'html',
+            'html'  => '<a href="' . esc_url($url) . '" class="button button-primary">Verwendung anzeigen</a>',
+        ];
+
+        // Prüfen, ob das Bild irgendwo benutzt wird
+        $image_url = wp_get_attachment_url($post->ID);
+        $args = [
+            'post_type'      => ['post', 'page'],
+            'post_status'    => 'any',
+            'posts_per_page' => 1,
+            's'              => basename($image_url)
+        ];
+
+        $query = new WP_Query($args);
+
+        // Wenn es einen Treffer gibt → Direktlink anzeigen
+        if ($query->have_posts()) {
+            $query->the_post();
+            $direct_link = get_edit_post_link(get_the_ID());
+            wp_reset_postdata();
+
+            // Zweiter Button
+            $form_fields['image_usage_direct'] = [
+                'label' => __('Direkt zum Beitrag', 'image-usage-tracker'),
+                'input' => 'html',
+                'html'  => '<a href="' . esc_url($direct_link) . '" class="button">Direkt zum Beitrag</a>',
+            ];
+        }
+        return $form_fields;
+    }
+
+    /**
+     * Inhalt der Admin-Seite (vorerst nur Platzhalter)
+     */
+    public function usage_page() {
+        echo '<div class="wrap"><h1>Image Usage Tracker</h1>';
+        echo '<p>Klicke auf ein Bild in der Mediathek, um seine Verwendung anzuzeigen.</p></div>';
+    }
+
+    /**
+     * Zeigt die Bildverwendung auf einer eigenen Seite an
+     */
+    public function show_image_usage() {
+    if (isset($_GET['page']) && $_GET['page'] === 'image-usage-tracker' && isset($_GET['image_id'])) {
+        $image_id = intval($_GET['image_id']);
+        $image_url = wp_get_attachment_url($image_id);
+
+        echo '<div class="wrap">';
+        echo '<h1>Bildverwendung</h1>';
+        echo '<p><strong>Datei:</strong> ' . esc_html(basename($image_url)) . '</p>';
+        echo '<p><strong>Bild-URL:</strong> <a href="' . esc_url($image_url) . '>' . esc_url($image_url) . '</a></p>';
+        echo '<hr>';
+
+        // Suche in allen Beiträgen & Seiten, ob das Bild benutzt wird
+        $args = [
+            'post_type'      => ['post', 'page'],
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            's'              => basename($image_url)
+        ];
+
+        $query = new WP_Query($args);
+
+        if ($query->have_posts()) {
+            echo '<h2>Gefunden in:</h2>';
+            echo '<table class="widefat fixed striped">';
+            echo '<thead><tr><th>Beitrag / Seite</th><th>Aktionen</th></tr></thead><tbody>';
+
+            while ($query->have_posts()) {
+                $query->the_post();
+                $post_id = get_the_ID();
+                $edit_link = get_edit_post_link($post_id);
+                $view_link = get_permalink($post_id);
+
+                echo '<tr>';
+                echo '<td><a href="' . esc_url($view_link) . '>' . esc_html(get_the_title()) . '</a></td>';
+                echo '<td>';
+                echo '<a href="' . esc_url($edit_link) . '" class="button button-primary" style="margin-right:6px;">Bearbeiten</a>';
+                echo '<a href="' . esc_url($view_link) . '" class="button">Ansehen</a>';
+                echo '</td>';
+                echo '</tr>';
+            }
+
+            echo '</tbody></table>';
+        } else {
+            echo '<p><em>Dieses Bild wird aktuell nirgends verwendet.</em></p>';
+        }
+
+        wp_reset_postdata();
+        echo '</div>';
+        exit;
+        }
+    }
+
+    /**
+ * Übersicht aller Bilder mit Verwendung
+ */
+public function overview_page() {
+    echo '<div class="wrap"><h1>Bilder-Übersicht</h1>';
+    echo '<table class="widefat fixed striped">';
+    echo '<thead><tr>
+            <th>Bild</th>
+            <th>Dateiname</th>
+            <th>Verwendungen</th>
+            <th>Aktion</th>
+          </tr></thead><tbody>';
+
+    // 🔹 Teil 2: Alle Bilder aus der Mediathek laden
+    $images = get_posts([
+        'post_type'      => 'attachment',
+        'post_mime_type' => 'image',
+        'posts_per_page' => -1,
+    ]);
+
+    // 🔹 Wenn Bilder gefunden wurden
+    if ($images) {
+        foreach ($images as $image) {
+            $image_url = wp_get_attachment_url($image->ID);
+            $filename  = basename($image_url);
+
+            // 🔹 Teil 3: Zählen, wie oft das Bild benutzt wird
+            $query = new WP_Query([
+                'post_type'      => ['post', 'page'],
+                'post_status'    => 'any',
+                'posts_per_page' => -1,
+                's'              => $filename,
+            ]);
+
+            $count = $query->found_posts;
+
+            // 🔹 Tabelle befüllen
+            echo '<tr>';
+            echo '<td><img src="' . esc_url($image_url) . '" width="50" style="border-radius:4px"></td>';
+            echo '<td>' . esc_html($filename) . '</td>';
+            echo '<td>' . $count . '</td>';
+            echo '<td><a href="' . admin_url('admin.php?page=image-usage-tracker&image_id=' . $image->ID) . '" class="button">Verwendung anzeigen</a></td>';
+            echo '</tr>';
+        }
+    } else {
+        echo '<tr><td colspan="4">Keine Bilder gefunden.</td></tr>';
+    }
+
+    echo '</tbody></table></div>';
+}
+
+
+}
+
+new ImageUsageTracker();
