@@ -6,6 +6,8 @@ class IUT_Admin_Menu {
     public function __construct() {
         add_action('admin_menu', [$this, 'register_menu']);
         add_filter('attachment_fields_to_edit', [$this, 'add_usage_button'], 10, 2);
+        add_action('wp_ajax_image_usage_load_images', [$this, 'ajax_load_images']);
+
     }
 
     /**
@@ -139,4 +141,69 @@ class IUT_Admin_Menu {
 
         echo '</tbody></table></div>';
     }
+
+    // AJAX-Handler für das Laden von Bildern
+    public function ajax_load_images() {
+    // Sicherheitscheck
+    check_ajax_referer('image_usage_nonce', 'security');
+
+    $paged   = isset($_POST['paged']) ? intval($_POST['paged']) : 1;
+    $search  = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+    $filter  = isset($_POST['filter']) ? sanitize_text_field($_POST['filter']) : 'all';
+    $per_page = 20;
+
+    $args = [
+        'post_type'      => 'attachment',
+        'post_mime_type' => 'image',
+        'posts_per_page' => $per_page,
+        'paged'          => $paged,
+    ];
+
+    // Suche nach Dateinamen
+    if (!empty($search)) {
+        $args['s'] = $search;
+    }
+
+    $images = get_posts($args);
+    $data = [];
+
+    foreach ($images as $image) {
+        $image_url = wp_get_attachment_url($image->ID);
+        $filename  = basename($image_url);
+
+        // Verwendungszähler
+        $query = new WP_Query([
+            'post_type'      => ['post', 'page'],
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            's'              => $filename,
+        ]);
+
+        $count = $query->found_posts;
+
+        // Filterlogik
+        if ($filter === 'used' && $count === 0) {
+            continue;
+        }
+        if ($filter === 'unused' && $count > 0) {
+            continue;
+        }
+
+        $data[] = [
+            'id'       => $image->ID,
+            'url'      => $image_url,
+            'filename' => $filename,
+            'count'    => $count,
+            'link'     => admin_url('admin.php?page=image-usage-tracker&image_id=' . $image->ID),
+        ];
+    }
+
+    wp_send_json([
+        'success' => true,
+        'images'  => $data,
+        'paged'   => $paged,
+        'has_more' => count($images) === $per_page,
+    ]);
+}
+
 }

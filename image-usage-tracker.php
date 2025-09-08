@@ -20,3 +20,24 @@ function iut_init_plugin() {
     new IUT_Image_Usage();
 }
 add_action('plugins_loaded', 'iut_init_plugin');
+
+
+// Skripte einbinden
+add_action('admin_enqueue_scripts', function($hook) {
+    if ($hook !== 'toplevel_page_image-usage-tracker' && $hook !== 'image-usage-tracker_page_image-usage-tracker-overview') {
+        return;
+    }
+
+    wp_enqueue_script(
+        'image-usage-admin',
+        plugin_dir_url(__FILE__) . 'assets/js/image-usage-admin.js',
+        ['jquery'],
+        '1.0',
+        true
+    );
+
+    wp_localize_script('image-usage-admin', 'imageUsage', [
+        'nonce' => wp_create_nonce('image_usage_nonce')
+    ]);
+});
+
