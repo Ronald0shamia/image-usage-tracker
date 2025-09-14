@@ -5,8 +5,39 @@ class IUT_Image_Usage {
 
     public function __construct() {
         add_action('admin_init', [$this, 'show_image_usage']);
+        add_action('save_post', [$this, 'update_cache_on_save'], 20, 2);
     }
 
+    public function update_cache_on_save($post_id, $post) {
+        if ($post->post_status !== 'publish') {
+            return;
+        }
+    
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'image_usage_cache';
+    
+        // Alle Bilder aus Content holen
+        preg_match_all('/wp-content\/uploads\/[^"\']+\.(jpg|jpeg|png|gif|webp)/i', $post->post_content, $matches);
+    
+        if (!empty($matches[0])) {
+            foreach ($matches[0] as $file_url) {
+                $image_id = attachment_url_to_postid($file_url);
+                if ($image_id) {
+                    // Usage-Count hochzählen
+                    $wpdb->query(
+                    $wpdb->prepare(
+                    "INSERT INTO $table_name (image_id, usage_count, last_checked)
+                     VALUES (%d, 1, NOW())
+                     ON DUPLICATE KEY UPDATE usage_count = usage_count + 1, last_checked = NOW()",
+                    $image_id ));
+                    }
+                }
+            }
+        }
+
+
+
+    
     /**
      * Zeigt die Bildverwendung in einer eigenen Ansicht
      */

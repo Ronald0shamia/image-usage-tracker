@@ -41,3 +41,18 @@ add_action('admin_enqueue_scripts', function($hook) {
     ]);
 });
 
+register_activation_hook(__FILE__, function() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'image_usage_cache';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE $table_name (
+        image_id BIGINT(20) UNSIGNED NOT NULL,
+        usage_count INT(11) NOT NULL DEFAULT 0,
+        last_checked DATETIME NOT NULL,
+        PRIMARY KEY  (image_id)
+    ) $charset_collate;";
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+});

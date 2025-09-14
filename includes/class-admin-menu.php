@@ -172,14 +172,11 @@ class IUT_Admin_Menu {
         $filename  = basename($image_url);
 
         // Verwendungszähler
-        $query = new WP_Query([
-            'post_type'      => ['post', 'page'],
-            'post_status'    => 'any',
-            'posts_per_page' => -1,
-            's'              => $filename,
-        ]);
-
-        $count = $query->found_posts;
+       global $wpdb;
+        $table_name = $wpdb->prefix . 'image_usage_cache';
+        $count = (int) $wpdb->get_var(
+            $wpdb->prepare("SELECT usage_count FROM $table_name WHERE image_id = %d", $image->ID)
+        );
 
         // Filterlogik
         if ($filter === 'used' && $count === 0) {
