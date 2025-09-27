@@ -76,8 +76,6 @@ class IUT_Admin_Menu {
         echo '</select>';
         echo '<input type="submit" class="button button-primary" value="Filtern">';
         echo '</form>';
-
-
         echo '<div class="wrap"><h1>Bilder-Übersicht</h1>';
         echo '<table class="widefat fixed striped">';
         echo '<thead>
